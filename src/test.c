@@ -59,6 +59,9 @@ void* pritn(void* args) {
 }
 
 void test( void ) {
+    Element elements[MAX_ELEMENTS];
+
+    /*
     pthread_mutex_init(&lock,NULL);
     int i = 0;
 	int* ip = &i;
@@ -70,6 +73,7 @@ void test( void ) {
     }
     pthread_join(id[0],NULL);
     pthread_join(id[1],NULL);
+    */
 }
 
 

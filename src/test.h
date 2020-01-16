@@ -13,4 +13,6 @@
 //void storeSum(Sum *, int , int);
 //int add(int , int);
 
+#include "typedefs.h"
+
 void test( void );

@@ -2,5 +2,7 @@
 #include <ctype.h>
 
 void addElement ( Element * );
-void updateDisplay ( void );
+int updateDisplay ( void );
 void initGamevals ( void );
+void initScrollList ( int );
+void activate ( Element * );

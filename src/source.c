@@ -1,5 +1,4 @@
-#include <unistd.h>
-#include <pthread.h>
+#include <conio.h>
 #include "fileprocessing.h"
 #include "screenhandling.h"
 #include "main.h"
@@ -8,24 +7,16 @@
 //#define DEBUG
 #define MAX_FRAMES 10
 
-enum elementIds {
-	BACKGROUND = 0,
-	/*...*/
-	BUTTON1 = 2, BUTTON2, BUTTON3, BUTTON4, BUTTON5,
-	NOTE1 = 7, NOTE2, NOTE3, NOTE4, NOTE5,
-	EGG
-};
-
 Element elements[MAX_ELEMENTS];
 
 GameState gamestate;
 
-pthread_t inputCycle;
-pthread_mutex_t inputEventsLock;
+pthread_t inputCycle, loadCycle;
 
 LARGE_INTEGER Frequency;
 
 int screenCycles ( void );
+void * loadElements ( void* );
 void * inputCycles ( void* );
 void pushInputEvent ( long, int );
 
@@ -39,22 +30,24 @@ return 0;
 	int initZero = 0;
 	gamestate = INACTIVE;
 	memcpy( inputEvents, &initZero, sizeof( int ) );
+	memcpy( elementsToLoad, &initZero, sizeof( int ) );
+	if( pthread_mutex_init(&elementLoaderLock, NULL) != 0 ) {
+		ERR("element mutex","could not be initialized");
+	}
 	QueryPerformanceFrequency(&Frequency);
 	initGamevals();
 
-	strcpy(elements[BACKGROUND].name, "screen");
+	strcpy(elements[BACKGROUND].name,"screen");
+	elements[BACKGROUND].elementId = BACKGROUND;
 	if( loadElement("../Resources/default.txt", &elements[BACKGROUND]) != 0 ) {
-		ERR("file","could not be opened");
+		ERR(elements[BACKGROUND].name,"could not be opened");
 	}
 	addElement(&elements[BACKGROUND]);
 
 	initScr();
-	//printf("init\n");
-	updatePalette(1,RATIONAL,5,FG);
-	updatePalette(1,LINEAR,0,BG);
-	//printf("palette\n");
+	updatePalette(0,LINEAR,0,FG);
+	updatePalette(0,LINEAR,0,TXT);
 	updateScreen();
-	//printf("1st update\n");
 
 	gamestate = ACTIVE;
 	screenCycles();
@@ -64,18 +57,29 @@ return 0;
 
 int screenCycles( void ) {
 	LARGE_INTEGER StartingTime, EndingTime, ElapsedMicroseconds;
-	long sleepTime = 1000000 / MAX_FRAMES;
+	const long sleepTime = 1000000 / MAX_FRAMES;
+	static int prev_init = 0;
 	
-	printf("starting thread\n");
 	if( pthread_create( &inputCycle, NULL, &inputCycles, NULL ) != 0 ) {
 		ERR("cannot create","thread");
 	}
+	if( pthread_create( &loadCycle, NULL, &loadElements, NULL ) != 0 ) {
+		ERR("cannot create","thread cycles");
+	}
+
+	initScrollList(0);
 
 	while ( gamestate == ACTIVE ) {
 		QueryPerformanceCounter(&StartingTime);
 		{
-			//updateDisplay();
-			//updateScreen();
+			gamestate = updateDisplay();
+			pthread_mutex_lock(&screenLock);
+			updateScreen();
+			pthread_mutex_unlock(&screenLock);
+			if( display->initList != prev_init ) {
+				initScrollList(display->initList);
+			}
+			prev_init = display->initList;
 		}
 		QueryPerformanceCounter(&EndingTime);
 		ElapsedMicroseconds.QuadPart = EndingTime.QuadPart - StartingTime.QuadPart;
@@ -84,19 +88,42 @@ int screenCycles( void ) {
 		usleep( sleepTime - ElapsedMicroseconds.QuadPart % sleepTime );
 	}
 
+    puts("\x1b[1mPress any key to exit" CLEAR);
 	pthread_join( inputCycle, NULL );
-
-	{//comments
-		/*
-		update display
-		update screen
-		calculate wait time */}
+	pthread_join( loadCycle, NULL );
 	return 0;
 }
 
-void* inputCycles( void* args ) {
-	printf("thread started\n");
+void* loadElements( void* args ) {
+	const long sleepTime = 1000000 / MAX_FRAMES;
+	char fileName[MAX_MOD * MAX_SIZE];
+	ElementIds elementId;
+	int currentsize;
 
+	while ( gamestate == ACTIVE ) {
+		memcpy( &currentsize, elementsToLoad, sizeof( int ) );
+		while ( currentsize > 0 ) {
+			pthread_mutex_lock(&elementLoaderLock);
+			{
+				elementId = elementsToLoad[currentsize].elementId;
+				strcpy( fileName, elementsToLoad[currentsize].fileName);
+				--currentsize;
+				memcpy( elementsToLoad, &currentsize, sizeof( int ) );
+				if( loadElement( fileName, &elements[elementId] ) != 0 ) {
+					ERR(fileName,"could not be opened");
+				}
+			}
+			pthread_mutex_unlock(&elementLoaderLock);
+			elements[elementId].elementId = elementId;
+			addElement( &elements[elementId] );
+		}
+		usleep(sleepTime);
+	}
+
+	pthread_mutex_destroy(&elementLoaderLock);
+}
+
+void* inputCycles( void* args ) {
 	int input;
 	LARGE_INTEGER InitTime, EventTime, ElapsedMicroseconds;
 	QueryPerformanceCounter(&InitTime);
@@ -104,13 +131,11 @@ void* inputCycles( void* args ) {
 		ERR("mutex","could not be initialized");
 	}
 
-	//strncpy(display->textVals,"thread started",strlen("thread started"));
 	while ( gamestate == ACTIVE ) {
-		//input = getchar();
-		if( ( input = getchar() ) == 0 ) {
-			input = getchar();
+		input = getch();
+		if( input == SPEC_KEY || input == 0 ) {
+			input = CHAR_BYTE_LIMIT + getch();
 		}
-		//printf("%c\n",input);
 		QueryPerformanceCounter(&EventTime);
 		ElapsedMicroseconds.QuadPart = EventTime.QuadPart - InitTime.QuadPart;
 		ElapsedMicroseconds.QuadPart *= 1000000;
@@ -119,31 +144,18 @@ void* inputCycles( void* args ) {
 	}
 
 	pthread_mutex_destroy(&inputEventsLock);
-
-	{//comments
-		/*
-		sleep on input
-		once event processed, send to...
-		-> update screen input stack
-		(where does the mutex go? try to avoid blocking *too many* processes...)*/}
 	return NULL;
 }
 
 void pushInputEvent ( long time, int event ) {
-	if( event == 27 ) {
-		gamestate = INACTIVE;
-	}
-	else
+	pthread_mutex_lock(&inputEventsLock);
 	{
-		pthread_mutex_lock(&inputEventsLock);
-		{
-			int currentSize;
-			memcpy( &currentSize, inputEvents, sizeof( int ) );
-			++currentSize;
-			inputEvents[currentSize].time = time;
-			inputEvents[currentSize].event = event;
-			memcpy( inputEvents, &currentSize, sizeof( int ) );
-		}
-		pthread_mutex_unlock(&inputEventsLock);
+		int currentSize;
+		memcpy( &currentSize, inputEvents, sizeof( int ) );
+		++currentSize;
+		inputEvents[currentSize].time = time;
+		inputEvents[currentSize].event = event;
+		memcpy( inputEvents, &currentSize, sizeof( int ) );
 	}
+	pthread_mutex_unlock(&inputEventsLock);
 }

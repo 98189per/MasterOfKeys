@@ -10,7 +10,7 @@ char strcolorList[CHAR_BYTE_LIMIT][20];
 
 void initScr( void ) {
     system("cls");
-    printf("\x1b[8;%d;%dt", display->height, display->width);
+    RESIZE( display->width, display->height );
 
     HANDLE hOut = GetStdHandle(STD_OUTPUT_HANDLE);
     if ( hOut == INVALID_HANDLE_VALUE ) {
@@ -39,70 +39,32 @@ void initScr( void ) {
 }
 
 void updateScreen( void ) {
-    //system("cls");
-    //printf("\x1b[8;%d;%dt", display->height, display->width);
-    
-    static int prev_sheetSize = 0;
-    BOOL update = FALSE;
-    int txtCounter = 0, txtColor, sheetSize;
+    HANDLE hOut = GetStdHandle(STD_OUTPUT_HANDLE);
+    int txtCounter = 0, txtColor;
+    int sheetSize, size;
     memcpy( &sheetSize, display->sheet, INT_SIZE );
-    //char printBuffer[ 26 * sheetSize ];
-    //printf("initialized variables\n");
 
-    if( sheetSize != prev_sheetSize ) {
-        free( displayCopy );
-        int size = ( sheetSize + 1 ) * sizeof( CHAR_BYTE ) + sizeof( int );
-        if( ( displayCopy = malloc( size ) ) == NULL ) {
-            ERR("display buffer","ran out of memory");
-        }
-        memset( displayCopy, 129, size );
-    }
-    //printf("checked size change\n");
     for( int i = INT_SIZE; i < sheetSize + INT_SIZE; i++) {
-        //printf("%d %d : ",display->sheet[i],displayCopy[i]);
-        if( display->sheet[i] != displayCopy[i] ) {
-            update = TRUE;
-            if( display->sheet[i] > 0 ) {
-                //sprintf(printBuffer, "%s%c%s", colorList[ display->sheet[i] - 1 ], ' ', CLEAR);
-                printf( "%s%c%s", colorList[ display->sheet[i] - 1 ], ' ', CLEAR);
-            }
-            else if ( display->sheet[i] == 0 ) {
-                if( display->textVals[txtCounter] == '\x81' ) {
-                    char tmpStr[3];
-                    ++txtCounter;
-                    txtColor = GRAD_SIZE * INT( display->textVals[txtCounter] );
-                    ++txtCounter;
-                    sprintf( tmpStr, "%c%c", display->textVals[txtCounter+1], display->textVals[txtCounter+2] );
-                    txtColor -= atoi( tmpStr );
-                    txtCounter += 3;
-                }
-                //sprintf(printBuffer, "%s%c%s", strcolorList[txtColor], display->textVals[txtCounter], CLEAR);
-                printf( "%s%c%s", strcolorList[txtColor], display->textVals[txtCounter], CLEAR);
+        if( display->sheet[i] > 0 ) {
+            printf( "%s%c%s", colorList[ display->sheet[i] - 1 ], ' ', CLEAR);
+        }
+        else if ( display->sheet[i] == 0 ) {
+            if( display->textVals[txtCounter] == '\x81' ) {
+                char tmpStr[3];
                 ++txtCounter;
+                txtColor = GRAD_SIZE * INT( display->textVals[txtCounter] );
+                ++txtCounter;
+                sprintf( tmpStr, "%c%c", display->textVals[txtCounter+1], display->textVals[txtCounter+2] );
+                txtColor -= atoi( tmpStr );
+                txtCounter += 3;
             }
-        }
-        else
-        {   
-            HANDLE hOut = GetStdHandle(STD_OUTPUT_HANDLE);
-            COORD CursorPos = GetConsoleCursorPosition( hOut );
-            if( CursorPos.X == display->width ) {
-                printf("\x1b[1B");
-                printf("\x1b[%dD", CursorPos.X);
-            }
-            else
-            {
-                printf("%s", "\x1b[1C");
-            }
+            printf( "%s%c%s", strcolorList[txtColor], display->textVals[txtCounter], CLEAR);
+            ++txtCounter;
         }
     }
-    //printf("updated buffer %d\n", update);
-    if( update ) {
-        //system("cls");
-        //puts(printBuffer);
-    }
-
-    displayCopy = display->sheet;
-    prev_sheetSize = sheetSize;
+    UP(display->height);
+    LEFT(display->width);
+	RESIZE( display->width, display->height );
 }
 
 void updatePalette( int alpha, int gradientStyle, int intensity, BOOL fgb ) {
