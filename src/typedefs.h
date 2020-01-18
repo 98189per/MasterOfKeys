@@ -114,7 +114,8 @@ typedef struct {
     char name[MAX_SIZE];
     int width, height;
     CHAR_BYTE* sheet;
-    char alt[MAX_MOD * MAX_SIZE], next[MAX_MOD * MAX_SIZE];
+    char alt[MAX_MOD * MAX_SIZE]/*, hover[MAX_MOD * MAX_SIZE]*/;
+    char next[MAX_MOD * MAX_SIZE];
     ElementIds elementId;
     Property* properties;
 } Element;

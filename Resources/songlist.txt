@@ -4,7 +4,7 @@
 
 {
 	"scroll": "1",
-	"listformat": "4; 11; 4; 10",
+	"listformat": "4; 11; 4; 10; 3",
 	"link": "../Songs/test-b/selectbar.txt 19",
 	"link": "../Songs/test-a/selectbar.txt 18",
 	"link": "../Songs/test-c/selectbar.txt 17",

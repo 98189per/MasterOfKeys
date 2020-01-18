@@ -105,6 +105,7 @@ void* loadElements( void* args ) {
 		while ( currentsize > 0 ) {
 			pthread_mutex_lock(&elementLoaderLock);
 			{
+				memcpy( &currentsize, elementsToLoad, sizeof( int ) );
 				elementId = elementsToLoad[currentsize].elementId;
 				strcpy( fileName, elementsToLoad[currentsize].fileName);
 				--currentsize;

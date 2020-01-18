@@ -13,6 +13,7 @@ void strcolor( int, const char *, Element *);
 void scroll( int, const char *, Element *);
 void active( int, const char *, Element *);
 void link( int, const char *, Element *);
+void name( int, const char *, Element *);
 void onClick( int, const char *, Element *);
 void atEsc( int, const char *, Element *);
 void initList( int, const char *, Element *);
@@ -21,14 +22,14 @@ void listLayout( int, const char *, Element *);
 unsigned long * keyHashes;
 FunctionPtr functions[] = { 
     &screen, &pos, &color, &str, &strcolor, &scroll, &active, 
-    &link, &onClick, &atEsc, &initList, &listLayout
+    &link, &name, &onClick, &atEsc, &initList, &listLayout
 };
 const char* keyValues[] = { 
     "screen", "1", "pos", "1", "color1", "8", "str", "1", "strcolor1", "8", 
-    "scroll", "1", "active", "1", "link", "1", "onclick", "1", "esc", "1", 
+    "scroll", "1", "active", "1", "link", "1", "name", "1", "onclick", "1", "esc", "1", 
     "startlist", "1", "listformat", "1"
 };
-const int noKeys = 26;
+const int noKeys = 27;
 
 void screen(int mod, const char * val, Element * element) {
     if( INT( *val ) ) {
@@ -107,7 +108,7 @@ void str(int mod, const char * val, Element * element) {
     if( display->strLength < display->height * display->width ) {
         char* tmp = realloc( display->textVals, ( display->strLength + ( strlen( val ) * strx ) + 5 ) * sizeof( char ) );
         if( tmp == NULL ) {
-            ERR("display str buffer","ran out of memory");
+            ERR("display str buffer realloc","ran out of memory");
         }
         display->textVals = tmp;
         strncat( display->textVals, strc, 5 );
@@ -136,7 +137,7 @@ void strcolor(int mod, const char * val, Element * element) {
 
 Element * scrollList[MAX_ELEMENTS][MAX_ELEMENTS + 2];
 void scroll(int mod, const char * val, Element * element) {
-    int listNo, listPos, listTop;
+    int listNo, listPos, listPosCpy, listTop;
     
     listNo = INT( *val );
     memcpy( &listPos, &(scrollList[listNo][MAX_ELEMENTS]), sizeof( int ) );
@@ -157,6 +158,10 @@ void scroll(int mod, const char * val, Element * element) {
         }
         ++i;
     }
+    if( element->elementId == MAX_ELEMENTS - 1 ) {
+        listPosCpy = listPos;
+        listPos = MAX_ELEMENTS - 1;
+    }
     scrollList[listNo][listPos] = element;
     if( !fixed ) {
         char copy[MAX_MOD * MAX_SIZE];
@@ -164,7 +169,7 @@ void scroll(int mod, const char * val, Element * element) {
         char* cVal = strtok(copy, ";");
         int noElements = atoi( cVal );
         int index = scrollList[listNo][listPos]->elementId - scrollList[listNo][listTop]->elementId;
-        if( index < noElements ) {
+        if( index < noElements && index > -1 ) {
             cVal = strtok(NULL, ";");
             int interval = atoi( cVal );
             cVal = strtok(NULL, ";");
@@ -177,8 +182,15 @@ void scroll(int mod, const char * val, Element * element) {
             pos( 1, args, scrollList[listNo][listPos] );
         }
     }
-    ++listPos;
-    memcpy( &(scrollList[listNo][MAX_ELEMENTS]), &listPos, sizeof( int ) );
+    if( listPos == MAX_ELEMENTS - 1 ) {
+        ++listPosCpy;
+        memcpy( &(scrollList[listNo][MAX_ELEMENTS]), &listPosCpy, sizeof( int ) );
+    }
+    else
+    {
+        ++listPos;
+        memcpy( &(scrollList[listNo][MAX_ELEMENTS]), &listPos, sizeof( int ) );
+    }
 }
 
 void active(int mod, const char * val, Element * element) {
@@ -192,13 +204,18 @@ void link(int mod, const char * val, Element * element) {
     memcpy( &currentsize, elementsToLoad, sizeof( int ) );
     sscanf(val, "%s %d", fileName, &elementId);
     pthread_mutex_lock(&elementLoaderLock);
-        {
-            ++currentsize;
-            strcpy( elementsToLoad[currentsize].fileName, fileName);
-            elementsToLoad[currentsize].elementId = elementId;
-            memcpy( elementsToLoad, &currentsize, sizeof( int ) );
-        }
+    {
+        memcpy( &currentsize, elementsToLoad, sizeof( int ) );
+        ++currentsize;
+        strcpy( elementsToLoad[currentsize].fileName, fileName);
+        elementsToLoad[currentsize].elementId = elementId;
+        memcpy( elementsToLoad, &currentsize, sizeof( int ) );
+    }
     pthread_mutex_unlock(&elementLoaderLock);
+}
+
+void name(int mod, const char * val, Element * element) {
+    strncpy(element->name, val, MAX_SIZE);
 }
 
 void onClick(int mod, const char * val, Element * element) {
@@ -300,23 +317,20 @@ void activate(Element * element) {
 
     strncpy(fileName, element->alt, MAX_MOD * MAX_SIZE);
     pthread_mutex_lock(&elementLoaderLock);
-        {
-            ++currentsize;
-            strcpy( elementsToLoad[currentsize].fileName, fileName);
-            elementsToLoad[currentsize].elementId = elementId;
-            memcpy( elementsToLoad, &currentsize, sizeof( int ) );
-        }
+    {
+        memcpy( &currentsize, elementsToLoad, sizeof( int ) );
+        ++currentsize;
+        strcpy( elementsToLoad[currentsize].fileName, fileName);
+        elementsToLoad[currentsize].elementId = elementId;
+        memcpy( elementsToLoad, &currentsize, sizeof( int ) );
+    }
     pthread_mutex_unlock(&elementLoaderLock);
 }
 
 void initScrollList( int listNo ) {
     sleep(1);
     if( scrollList[listNo][0] != NULL ) {
-        if( strcmp(scrollList[listNo][0]->alt, "layout") == 0 ) {
-            activate(scrollList[listNo][1]);
-        }
-        else
-        {
+        if( strcmp(scrollList[listNo][0]->alt, "layout") != 0 ) {
             activate(scrollList[listNo][0]);
         }
     }
@@ -348,38 +362,60 @@ int updateDisplay( void ) {
                     ++currentListPos;
                 }
                 if( currentListPos > 1 ) {
-                    int listTop;
+                    activate(scrollList[currentListNo][currentListPos]);
+                    activate(scrollList[currentListNo][currentListPos - 1]);
+                    sleep(1);
+
+                    int listTop, insertion = -1, count = 0;
                     memcpy( &listTop, &(scrollList[currentListNo][MAX_ELEMENTS + 1]), sizeof( int ) );
                     char copy[MAX_MOD * MAX_SIZE];
                     strcpy(copy, scrollList[currentListNo][0]->next);
                     char* cVal = strtok(copy, ";");
                     int noElements = atoi( cVal );
-
+                    for( int i = 0; i < 4; i++) {
+                        cVal = strtok(NULL, ";");
+                    }
+                    if( cVal != NULL ) {
+                        insertion = atoi( cVal );
+                    }
+                    free( display->textVals );
+                    if( ( display->textVals = calloc( 1, sizeof( char ) ) ) == NULL ) {
+                        ERR("display text","ran out of memory");
+                    }
+                    
                     if( currentListPos == listTop ) {
                         --listTop;
                         memcpy( &(scrollList[currentListNo][MAX_ELEMENTS + 1]), &listTop, sizeof( int ) );
-                        free( display->textVals );
-                        if( ( display->textVals = calloc( 1, sizeof( char ) ) ) == NULL ) {
-                            ERR("display text","ran out of memory");
-                        }
-                        display->strLength = 0;
-                        for( int i = listTop; i < listTop + noElements; i++) {
-                            Property *propertyPtr = scrollList[currentListNo][i]->properties;
+                    }
+                    display->strLength = 0;
+                    for( int i = listTop; i < listTop + noElements; i++) {
+                        if( count == insertion ) {
+                            Property *propertyPtr = scrollList[currentListNo][MAX_ELEMENTS - 1]->properties;
                             char list[4];
                             unsigned long result = hash("str");
                             sprintf( list, "%d", currentListNo );
-                            scroll( 1, list, scrollList[currentListNo][i] );
+                            scroll( 1, list, scrollList[currentListNo][MAX_ELEMENTS - 1] );
                             while ( propertyPtr != NULL ) {
                                 if( hash(propertyPtr->key) == result ) {
-                                    str( 1, propertyPtr->value, scrollList[currentListNo][i] );
+                                    str( 1, propertyPtr->value, scrollList[currentListNo][MAX_ELEMENTS - 1] );
                                 }
                                 propertyPtr = propertyPtr->nextProperty;
                             }
                         }
+                        Property *propertyPtr = scrollList[currentListNo][i]->properties;
+                        char list[4];
+                        unsigned long result = hash("str");
+                        sprintf( list, "%d", currentListNo );
+                        scroll( 1, list, scrollList[currentListNo][i] );
+                        while ( propertyPtr != NULL ) {
+                            if( hash(propertyPtr->key) == result ) {
+                                str( 1, propertyPtr->value, scrollList[currentListNo][i] );
+                            }
+                            propertyPtr = propertyPtr->nextProperty;
+                        }
+                        ++count;
                     }
-                    activate(scrollList[currentListNo][currentListPos]);
                     --currentListPos;
-                    activate(scrollList[currentListNo][currentListPos]);
                 }
             }
             else
@@ -393,26 +429,50 @@ int updateDisplay( void ) {
             break;
         case KEY_DOWN:
             if( strcmp( scrollList[currentListNo][0]->alt, "layout" ) == 0 ) {
-                if( currentListPos == 0 ) {
-                    ++currentListPos;
-                }
-                if( currentListPos < MAX_ELEMENTS && scrollList[currentListNo][currentListPos]->elementId < scrollList[currentListNo][currentListPos + 1]->elementId ) {
-                    int listTop;
-                    memcpy( &listTop, &(scrollList[currentListNo][MAX_ELEMENTS + 1]), sizeof( int ) );
-                    char copy[MAX_MOD * MAX_SIZE];
-                    strcpy(copy, scrollList[currentListNo][0]->next);
-                    char* cVal = strtok(copy, ";");
-                    int noElements = atoi( cVal );
-
-                    if( currentListPos == listTop + noElements - 1 ) {
-                        ++listTop;
-                        memcpy( &(scrollList[currentListNo][MAX_ELEMENTS + 1]), &listTop, sizeof( int ) );
+                if( scrollList[currentListNo][currentListPos + 1] != NULL ) {
+                    if( currentListPos < MAX_ELEMENTS && scrollList[currentListNo][currentListPos]->elementId < scrollList[currentListNo][currentListPos + 1]->elementId && scrollList[currentListNo][currentListPos + 1]->elementId != MAX_ELEMENTS - 1 ) {
+                        if( currentListPos != 0 ) {
+                            activate(scrollList[currentListNo][currentListPos]);
+                        }
+                        activate(scrollList[currentListNo][currentListPos + 1]);
+                        sleep(1);
+                        
+                        int listTop, insertion = -1, count = 0;
+                        memcpy( &listTop, &(scrollList[currentListNo][MAX_ELEMENTS + 1]), sizeof( int ) );
+                        char copy[MAX_MOD * MAX_SIZE];
+                        strcpy(copy, scrollList[currentListNo][0]->next);
+                        char* cVal = strtok(copy, ";");
+                        int noElements = atoi( cVal );
+                        for( int i = 0; i < 4; i++) {
+                            cVal = strtok(NULL, ";");
+                        }
+                        if( cVal != NULL ) {
+                            insertion = atoi( cVal );
+                        }
                         free( display->textVals );
                         if( ( display->textVals = calloc( 1, sizeof( char ) ) ) == NULL ) {
                             ERR("display text","ran out of memory");
                         }
                         display->strLength = 0;
+                        if( currentListPos == listTop + noElements - 1 ) {
+                            ++listTop;
+                            memcpy( &(scrollList[currentListNo][MAX_ELEMENTS + 1]), &listTop, sizeof( int ) );
+                            int i = 1;
+                        }
                         for( int i = listTop; i < listTop + noElements; i++) {
+                            if( count == insertion ) {
+                                Property *propertyPtr = scrollList[currentListNo][MAX_ELEMENTS - 1]->properties;
+                                char list[4];
+                                unsigned long result = hash("str");
+                                sprintf( list, "%d", currentListNo );
+                                scroll( 1, list, scrollList[currentListNo][MAX_ELEMENTS - 1] );
+                                while ( propertyPtr != NULL ) {
+                                    if( hash(propertyPtr->key) == result ) {
+                                        str( 1, propertyPtr->value, scrollList[currentListNo][MAX_ELEMENTS - 1] );
+                                    }
+                                    propertyPtr = propertyPtr->nextProperty;
+                                }
+                            }
                             Property *propertyPtr = scrollList[currentListNo][i]->properties;
                             char list[4];
                             unsigned long result = hash("str");
@@ -424,11 +484,10 @@ int updateDisplay( void ) {
                                 }
                                 propertyPtr = propertyPtr->nextProperty;
                             }
+                            ++count;
                         }
-                    }                 
-                    activate(scrollList[currentListNo][currentListPos]);
-                    ++currentListPos;
-                    activate(scrollList[currentListNo][currentListPos]);
+                        ++currentListPos;
+                    }
                 }
             }
             else
@@ -447,7 +506,7 @@ int updateDisplay( void ) {
                 int currentsize;
                 memcpy( &currentsize, elementsToLoad, sizeof( int ) );
 
-                if( strcmp( scrollList[currentListNo][currentListPos]->alt, "layout" ) != 0 ) {
+                if( scrollList[currentListNo][currentListPos]->next[0] != 0 && strcmp( scrollList[currentListNo][currentListPos]->alt, "layout" ) != 0 ) {
                     strncpy(fileName, scrollList[currentListNo][currentListPos]->next, MAX_MOD * MAX_SIZE);
                     if( strcmp( fileName, "exit" ) == 0 ) {
                         pthread_mutex_destroy(&screenLock);

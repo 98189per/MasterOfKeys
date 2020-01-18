@@ -14,5 +14,6 @@
 	"str": " 'egg'; 1; 1.00",
 	"str": " 'yummy'; 1; 1.00",
 	"scroll": "1",
-	"active": "../Songs/test-c/selectbar.txt"
+	"active": "../Songs/test-c/selectbar.txt",
+	"link": "../Resources/clearpreview.txt 49"
 }

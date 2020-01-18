@@ -88,9 +88,9 @@ void unloadElement (Element * element) {
 
     free(element->sheet);
     propertyPtr = element->properties;
-    do {
+    while( propertyPtr != NULL ) {
         free(propertyPtr->key);
         free(propertyPtr->value);
         propertyPtr = propertyPtr->nextProperty;
-    } while( propertyPtr->nextProperty != NULL );
+    }
 }
