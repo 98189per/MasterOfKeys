@@ -1,6 +1,7 @@
 #include "main.h"
 
 PropertyUpdate * updates[MAX_ELEMENTS];
+BOOL songIsPlaying = FALSE;
 
 typedef void (*FunctionPtr)(int, const char*, Element*);
 
@@ -18,18 +19,82 @@ void onClick( int, const char *, Element *);
 void atEsc( int, const char *, Element *);
 void initList( int, const char *, Element *);
 void listLayout( int, const char *, Element *);
+void playSong( int, const char *, Element *);
+void loadNotes( int, const char *, Element *);
+void setSpeed( int, const char *, Element *);
+void noteOffset( int, const char *, Element *);
+void noteElement( int, const char *, Element *);
+void staffSpec( int, const char *, Element *);
 
 unsigned long * keyHashes;
 FunctionPtr functions[] = { 
     &screen, &pos, &color, &str, &strcolor, &scroll, &active, 
-    &link, &name, &onClick, &atEsc, &initList, &listLayout
+    &link, &name, &onClick, &atEsc, &initList, &listLayout,
+    &playSong, &loadNotes, &setSpeed, &noteOffset, &noteElement,
+    &staffSpec
 };
 const char* keyValues[] = { 
     "screen", "1", "pos", "1", "color1", "8", "str", "1", "strcolor1", "8", 
     "scroll", "1", "active", "1", "link", "1", "name", "1", "onclick", "1", "esc", "1", 
-    "startlist", "1", "listformat", "1"
+    "startlist", "1", "listformat", "1", "song", "1", "notes", "1", "speed", "1", 
+    "offset", "1", "note0", "14", "staff", "1"
 };
-const int noKeys = 27;
+const int noKeys = 46;
+
+void playSong(int mod, const char * val, Element * element) {
+/*  have loadsong time store true delta time and also insert null note at eos   */
+}
+
+void loadNotes(int mod, const char * val, Element * element) {
+    if( val[0] == '.' ) {
+        pthread_mutex_lock(&elementLoaderLock);
+        {
+            strncpy( currentSong.loadFrom, val, MAX_MOD * MAX_SIZE );
+        }
+        pthread_mutex_unlock(&elementLoaderLock);
+        sleep(1);
+        LARGE_INTEGER StartTime;
+        QueryPerformanceCounter(&StartTime);
+		StartTime.QuadPart *= 1000000;
+		StartTime.QuadPart /= Frequency.QuadPart;
+		StartTime.QuadPart -= initTime;
+        currentSong.start = StartTime.QuadPart;
+        songIsPlaying = TRUE;
+    }
+}
+
+void setSpeed(int mod, const char * val, Element * element) {
+    currentSong.speed = atoi( val );
+}
+
+void noteOffset(int mod, const char * val, Element * element) {
+    currentSong.offset = atoi( val );
+}
+
+void noteElement(int mod, const char * val, Element * element) {
+    int currentsize;
+    memcpy( &currentsize, elementsToLoad, sizeof( int ) );
+    pthread_mutex_lock(&elementLoaderLock);
+    {
+        memcpy( &currentsize, elementsToLoad, sizeof( int ) );
+        ++currentsize;
+        strcpy( elementsToLoad[currentsize].fileName, val );
+        elementsToLoad[currentsize].elementId = MAX_ELEMENTS + mod + 1;
+        memcpy( elementsToLoad, &currentsize, sizeof( int ) );
+    }
+    pthread_mutex_unlock(&elementLoaderLock);
+}
+
+void staffSpec(int mod, const char * val, Element * element) {
+    char copy[MAX_MOD * MAX_SIZE];
+    strncpy(copy, val, MAX_MOD * MAX_SIZE);
+    char* cVal = strtok(copy, ";");
+    currentSong.ytop = atoi( cVal );
+    cVal = strtok(NULL, ";");
+    currentSong.yint = atoi( cVal );
+    cVal = strtok(NULL, ";");
+    currentSong.xright = atoi( cVal );
+}
 
 void screen(int mod, const char * val, Element * element) {
     if( INT( *val ) ) {
@@ -207,7 +272,7 @@ void link(int mod, const char * val, Element * element) {
     {
         memcpy( &currentsize, elementsToLoad, sizeof( int ) );
         ++currentsize;
-        strcpy( elementsToLoad[currentsize].fileName, fileName);
+        strcpy( elementsToLoad[currentsize].fileName, fileName );
         elementsToLoad[currentsize].elementId = elementId;
         memcpy( elementsToLoad, &currentsize, sizeof( int ) );
     }
@@ -269,9 +334,10 @@ void initGamevals( void ) {
     if( pthread_mutex_init(&screenLock, NULL) != 0 ) {
         ERR("screen mutex","could not be initialized");
     }
+	strncpy( currentSong.loadFrom, "\0", 2 );
 
     for( int i = 0; i < length; i += 2 ) {
-        for( int j = 0; j < ( int ) INT( *keyValues[i+1] ); j++) {
+        for( int j = 0; j < atoi( keyValues[i+1] ); j++) {
             keyHashes[counter] = hash( ( CHAR_BYTE * ) keyValues[i]) + ( unsigned long ) j;
             ++counter;
         }
@@ -285,7 +351,7 @@ void addElement(Element * element) {
 
     pthread_mutex_lock(&screenLock);
     {
-        while( TRUE ) {
+        while ( TRUE ) {
             int fNum = 0, mod = 0, counter = 0;
             unsigned long next, current, tmp = hash( ( CHAR_BYTE * ) propertyPtr->key );
             while( ( current = keyHashes[counter] ) != tmp ) {
@@ -338,6 +404,7 @@ void initScrollList( int listNo ) {
 
 int updateDisplay( void ) {
     static int currentListNo = 0, currentListPos = 0;
+    static int stdX[MAX_ELEMENTS];
     long time;
     int event;
 
@@ -550,6 +617,45 @@ int updateDisplay( void ) {
             break;
         default:
         break;
+    }
+
+    if( songIsPlaying ) {
+        static int counterStart = 0;
+        LARGE_INTEGER deltaTime;
+        long delta;
+        QueryPerformanceCounter(&deltaTime);
+		deltaTime.QuadPart *= 1000000;
+		deltaTime.QuadPart /= Frequency.QuadPart;
+		deltaTime.QuadPart -= initTime + currentSong.offset * 1000;
+        delta = deltaTime.QuadPart;
+        int counter = counterStart;
+        while ( TRUE ) {
+            long noteTime = currentSong.start + currentSong.notes[counter].time;
+            long maxDelta = deltaTime.QuadPart + currentSong.speed * currentSong.usPerNote;
+            if( delta < noteTime && noteTime < maxDelta ) {
+                int starty = currentSong.ytop + currentSong.yint * ( 14 - currentSong.notes[counter].note );
+                int startx = currentSong.notes[counter].time * currentSong.xright / ( currentSong.speed * currentSong.usPerNote );
+                char args[8];
+                sprintf( args, "%d;%d", startx, starty );
+                pos( 1, args, currentSong.skins[1] );
+            }
+            if( noteTime > maxDelta ) {
+                if( currentSong.notes[counter].note == EOS ) {
+                    songIsPlaying = FALSE;
+                    break;
+                }
+                break;
+            }
+            ++counter;
+        }
+        /*
+
+            12:00AM 1/20/2020
+            day of submission
+            imma head out for tonight
+            but good grind boys...
+
+        */
     }
 
     return ACTIVE;

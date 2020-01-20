@@ -15,5 +15,6 @@
 	"str": " 'The Seven Seas'; 1; 2.00",
 	"scroll": "1",
 	"active": "../Songs/test-a/selectbar.txt",
-	"link": "../Songs/test-a/selectinfo.txt 49"
+	"link": "../Songs/test-a/selectinfo.txt 49",
+	"onclick": "../Songs/test-a/playsong.txt"
 }

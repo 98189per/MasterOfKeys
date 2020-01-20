@@ -94,6 +94,17 @@ typedef enum {
 	EGG
 } ElementIds;
 
+typedef enum {
+    C3, D3, E3, F3, G3, A3, B3, 
+    C4, D4, E4, F4, G4, A4, B4, 
+    EOS
+} Scale;
+
+typedef struct {
+    long time;
+    Scale note;
+} NoteCollection;
+
 typedef struct {
     long time;
     int event;
@@ -114,7 +125,7 @@ typedef struct {
     char name[MAX_SIZE];
     int width, height;
     CHAR_BYTE* sheet;
-    char alt[MAX_MOD * MAX_SIZE]/*, hover[MAX_MOD * MAX_SIZE]*/;
+    char alt[MAX_MOD * MAX_SIZE];
     char next[MAX_MOD * MAX_SIZE];
     ElementIds elementId;
     Property* properties;
@@ -139,8 +150,22 @@ typedef struct {
     CHAR_BYTE strcolors[8][3];
 } Screen;
 
+typedef struct {
+    long start;
+    int usPerNote, ticksPerNote;
+    char loadFrom[MAX_MOD * MAX_SIZE];
+    int offset, speed, ytop, yint, xright;
+    Element * skins[14];
+    NoteCollection * notes;
+} Song;
+
+long initTime;
+
 Screen * display;
+Song currentSong;
 
 InputEvent inputEvents[MAX_MOD * MAX_ELEMENTS];
 ElementLoader elementsToLoad[MAX_ELEMENTS];
 pthread_mutex_t inputEventsLock, elementLoaderLock, screenLock;
+
+LARGE_INTEGER Frequency;

@@ -13,8 +13,6 @@ GameState gamestate;
 
 pthread_t inputCycle, loadCycle;
 
-LARGE_INTEGER Frequency;
-
 int screenCycles ( void );
 void * loadElements ( void* );
 void * inputCycles ( void* );
@@ -23,7 +21,14 @@ void pushInputEvent ( long, int );
 int main() {
 	
 #ifdef DEBUG
-test():
+NoteCollection * currentSongNotes;
+//currentSongNotes = calloc( 50, 1 * sizeof( NoteCollection ) );
+if((currentSongNotes=loadSongNotes("../Songs/test-a/The_Seven_Seas_[Tutorial]_rev1.mid"))==NULL){
+	ERR("bruh","bruh");
+}
+for(int i = 0; i < 50; i++){
+	printf("%d %ld\t",currentSongNotes[i].note,currentSongNotes[i].time);
+}
 return 0;
 #endif
 
@@ -88,6 +93,7 @@ int screenCycles( void ) {
 		usleep( sleepTime - ElapsedMicroseconds.QuadPart % sleepTime );
 	}
 
+	system("cls");
     puts("\x1b[1mPress any key to exit" CLEAR);
 	pthread_join( inputCycle, NULL );
 	pthread_join( loadCycle, NULL );
@@ -105,11 +111,27 @@ void* loadElements( void* args ) {
 		while ( currentsize > 0 ) {
 			pthread_mutex_lock(&elementLoaderLock);
 			{
+				if( currentSong.loadFrom[0] == '.' ) {
+					if( ( currentSong.notes = loadSongNotes( currentSong.loadFrom ) ) == NULL ) {
+						ERR("couldn't load",currentSong.loadFrom);
+					}
+					strncpy( currentSong.loadFrom, "\0", 2 );
+				}
 				memcpy( &currentsize, elementsToLoad, sizeof( int ) );
 				elementId = elementsToLoad[currentsize].elementId;
-				strcpy( fileName, elementsToLoad[currentsize].fileName);
+				strcpy( fileName, elementsToLoad[currentsize].fileName );
 				--currentsize;
 				memcpy( elementsToLoad, &currentsize, sizeof( int ) );
+				if( elementId > MAX_ELEMENTS ) {
+					if( ( currentSong.skins[elementId - MAX_ELEMENTS - 1] = malloc( sizeof( Element ) ) ) == NULL ) {
+						ERR(fileName,"could not be alloc'd");
+					}
+					if( loadElement( fileName, currentSong.skins[elementId - MAX_ELEMENTS - 1] ) != 0 ) {
+						ERR(fileName,"could not be opened");
+					}
+					pthread_mutex_unlock(&elementLoaderLock);
+					continue;
+				}
 				if( loadElement( fileName, &elements[elementId] ) != 0 ) {
 					ERR(fileName,"could not be opened");
 				}
@@ -126,8 +148,11 @@ void* loadElements( void* args ) {
 
 void* inputCycles( void* args ) {
 	int input;
-	LARGE_INTEGER InitTime, EventTime, ElapsedMicroseconds;
+	LARGE_INTEGER InitTime, EventTime;
 	QueryPerformanceCounter(&InitTime);
+	InitTime.QuadPart *= 1000000;
+	InitTime.QuadPart /= Frequency.QuadPart;
+	initTime = InitTime.QuadPart;
 	if( pthread_mutex_init(&inputEventsLock, NULL) != 0 ) {
 		ERR("mutex","could not be initialized");
 	}
@@ -138,10 +163,10 @@ void* inputCycles( void* args ) {
 			input = CHAR_BYTE_LIMIT + getch();
 		}
 		QueryPerformanceCounter(&EventTime);
-		ElapsedMicroseconds.QuadPart = EventTime.QuadPart - InitTime.QuadPart;
-		ElapsedMicroseconds.QuadPart *= 1000000;
-		ElapsedMicroseconds.QuadPart /= Frequency.QuadPart;
-		pushInputEvent( ElapsedMicroseconds.QuadPart, input );
+		EventTime.QuadPart *= 1000000;
+		EventTime.QuadPart /= Frequency.QuadPart;
+		EventTime.QuadPart -= initTime;
+		pushInputEvent( EventTime.QuadPart, input );
 	}
 
 	pthread_mutex_destroy(&inputEventsLock);
