@@ -3,11 +3,11 @@
 char* colorGen(int, int, int, int, BOOL);
 int linearGradient(int, int, int);
 int rationalGradient(int, int, int, int);
-COORD GetConsoleCursorPosition(HANDLE);
 
 char colorList[CHAR_BYTE_LIMIT][20];
 char strcolorList[CHAR_BYTE_LIMIT][20];
 
+//sets the screen to raw mode and enables ANSI escape sequencing
 void initScr( void ) {
     system("cls");
     RESIZE( display->width, display->height );
@@ -38,8 +38,8 @@ void initScr( void ) {
     }
 }
 
+//formats and prints the display array, then moves cursor to start of screen again
 void updateScreen( void ) {
-    HANDLE hOut = GetStdHandle(STD_OUTPUT_HANDLE);
     int txtCounter = 0, txtColor;
     int sheetSize, size;
     memcpy( &sheetSize, display->sheet, INT_SIZE );
@@ -67,6 +67,7 @@ void updateScreen( void ) {
 	RESIZE( display->width, display->height );
 }
 
+//generate palette (i have not implemented this much, so feel free to write property functions utilizing this!!!)
 void updatePalette( int alpha, int gradientStyle, int intensity, BOOL fgb ) {
     for( int i = 1; i <= ( 8 * GRAD_SIZE ); i++) {
         if( fgb ) {
@@ -123,6 +124,8 @@ int linearGradient(int grad, int val, int alpha) {
     return ( val < alpha ) ? val + ( fac * grad ) : val - ( fac * grad );
 }
 
+//i spent 2 hours trying to figure out rational interpolation ;(
+// smh im kinda rusty in math ngl
 int rationalGradient(int grad, int val, int alpha, int intensity) {
     float difference = val - alpha;
     float magicNo = ( 1 / ( float ) intensity ) * ( GRAD_SIZE );
@@ -130,18 +133,4 @@ int rationalGradient(int grad, int val, int alpha, int intensity) {
     float numerator = difference + factor;
     float denominator = ( 1 / ( float ) intensity ) * grad + 1;
     return ( int ) ( numerator / denominator - factor + alpha );
-}
-
-COORD GetConsoleCursorPosition(HANDLE hConsoleOutput) {
-    CONSOLE_SCREEN_BUFFER_INFO cbsi;
-
-    if (GetConsoleScreenBufferInfo(hConsoleOutput, &cbsi))
-    {
-        return cbsi.dwCursorPosition;
-    }
-    else
-    {
-        COORD invalid = { 0, 0 };
-        return invalid;
-    }
 }

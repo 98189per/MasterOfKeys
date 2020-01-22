@@ -1,10 +1,13 @@
 #include "main.h"
+#include <mmsystem.h>
 
 PropertyUpdate * updates[MAX_ELEMENTS];
 BOOL songIsPlaying = FALSE;
+void * soundBuffer;
 
 typedef void (*FunctionPtr)(int, const char*, Element*);
 
+//user-defined function declarations
 unsigned long hash( CHAR_BYTE * );
 void screen( int, const char *, Element *);
 void pos( int, const char *, Element *);
@@ -27,22 +30,39 @@ void noteElement( int, const char *, Element *);
 void staffSpec( int, const char *, Element *);
 
 unsigned long * keyHashes;
-FunctionPtr functions[] = { 
+FunctionPtr functions[] = {                                         //add function pointers here
     &screen, &pos, &color, &str, &strcolor, &scroll, &active, 
     &link, &name, &onClick, &atEsc, &initList, &listLayout,
     &playSong, &loadNotes, &setSpeed, &noteOffset, &noteElement,
     &staffSpec
 };
-const char* keyValues[] = { 
+const char* keyValues[] = {                                         //add corresponding property names here (order matters!)
     "screen", "1", "pos", "1", "color1", "8", "str", "1", "strcolor1", "8", 
     "scroll", "1", "active", "1", "link", "1", "name", "1", "onclick", "1", "esc", "1", 
     "startlist", "1", "listformat", "1", "song", "1", "notes", "1", "speed", "1", 
     "offset", "1", "note0", "14", "staff", "1"
 };
-const int noKeys = 46;
+const int noKeys = 46;                                              //DON'T FORGET TO UPDATE THIS VALUE AS WELL
 
+
+//Define property functions here
 void playSong(int mod, const char * val, Element * element) {
-/*  have loadsong time store true delta time and also insert null note at eos   */
+    FILE *soundPtr;
+    long soundSize;
+
+    if( ( soundPtr = fopen( val, "rb" ) ) == NULL ) {
+        ERR(val,"could not be opened");
+    }
+    fseek( soundPtr, 0L, SEEK_END );
+    soundSize = ftell( soundPtr );
+    if( ( soundBuffer = malloc( soundSize ) ) == NULL ) {
+        ERR("sound file","was probably too big...");
+    }
+    rewind( soundPtr );
+    if( fread( soundBuffer, 1, soundSize, soundPtr ) != soundSize ) {
+        ERR("sound file","would not load");
+    }
+    PlaySound(soundBuffer, GetModuleHandle(NULL), SND_MEMORY | SND_ASYNC);
 }
 
 void loadNotes(int mod, const char * val, Element * element) {
@@ -94,6 +114,8 @@ void staffSpec(int mod, const char * val, Element * element) {
     currentSong.yint = atoi( cVal );
     cVal = strtok(NULL, ";");
     currentSong.xright = atoi( cVal );
+    cVal = strtok(NULL, ";");
+    currentSong.xleft = atoi( cVal );
 }
 
 void screen(int mod, const char * val, Element * element) {
@@ -105,7 +127,7 @@ void screen(int mod, const char * val, Element * element) {
             ERR("display","ran out of memory");
         }
         display->width = element->width;
-        display->height = element->height;        
+        display->height = element->height;
         int tmp = 0;
         memcpy( &tmp, element->sheet, INT_SIZE );
         int size = ( tmp + 1 ) * sizeof( CHAR_BYTE ) + sizeof( int );
@@ -304,6 +326,7 @@ void listLayout(int mod, const char * val, Element * element) {
     strncpy(element->next, val, MAX_MOD * MAX_SIZE);
 }
 
+//hashing function for matching keys
 unsigned long hash(CHAR_BYTE *str) {
     unsigned long hash = 5381;
     int c;
@@ -315,6 +338,7 @@ unsigned long hash(CHAR_BYTE *str) {
     return hash;
 }
 
+//initialization of game values
 void initGamevals( void ) {
     int initZero = 0, counter = 0;
     int length = sizeof( keyValues ) / sizeof( keyValues[0] );
@@ -327,6 +351,14 @@ void initGamevals( void ) {
     }
     if( ( display->textVals = calloc( 1, sizeof( char ) ) ) == NULL ) {
         ERR("init display text","ran out of memory");
+    }
+    if( ( currentSong.notes = calloc( 1, sizeof( NoteCollection ) ) ) == NULL ) {
+        ERR("song notes","ran out of memory");
+    }
+    for( int i = 0; i < 14; i++) {
+        if( ( currentSong.skins[i] = malloc( sizeof( Element ) ) ) == NULL ) {
+            ERR("note skins","could not be alloc'd");
+        }
     }
     if( ( keyHashes = malloc( noKeys * sizeof( unsigned long ) ) ) == NULL ) {
         ERR("key hashes","ran out of memory");
@@ -344,6 +376,7 @@ void initGamevals( void ) {
     }
 }
 
+//process property chain and add values
 void addElement(Element * element) {
     Property* propertyPtr;
 
@@ -375,6 +408,7 @@ void addElement(Element * element) {
     pthread_mutex_unlock(&screenLock);
 }
 
+//push to loading stack
 void activate(Element * element) {
     char fileName[MAX_MOD * MAX_SIZE];
 	ElementIds elementId = element->elementId;
@@ -402,12 +436,14 @@ void initScrollList( int listNo ) {
     }
 }
 
-int updateDisplay( void ) {
+//300 line function that executes every second... aka i was too lazy to abstract this part
+int updateDisplay( Element * screen ) {
     static int currentListNo = 0, currentListPos = 0;
     static int stdX[MAX_ELEMENTS];
     long time;
     int event;
 
+    //pop input stack
     int currentSize;
     memcpy( &currentSize, inputEvents, sizeof( int ) );
     if( currentSize > 0 ) {
@@ -421,6 +457,7 @@ int updateDisplay( void ) {
         pthread_mutex_unlock(&inputEventsLock);
     }
 
+    //process key events (mainly deals with scrolling menus for now)
     currentListNo = display->initList;
     switch( event ) {
         case KEY_UP:
@@ -612,6 +649,11 @@ int updateDisplay( void ) {
                     memcpy( elementsToLoad, &currentsize, sizeof( int ) );
                 }
                 pthread_mutex_unlock(&elementLoaderLock);
+                if( songIsPlaying ) {
+                    PlaySound(NULL, 0, 0);
+                    free( soundBuffer );
+                    songIsPlaying = FALSE;
+                }
                 currentListPos = 0;
             }
             break;
@@ -619,44 +661,75 @@ int updateDisplay( void ) {
         break;
     }
 
+    //update song notes
+    static long lastDelta = 0;
     if( songIsPlaying ) {
-        static int counterStart = 0;
+        long noteTime, delta = 0;
+        char args[8];
         LARGE_INTEGER deltaTime;
-        long delta;
         QueryPerformanceCounter(&deltaTime);
 		deltaTime.QuadPart *= 1000000;
 		deltaTime.QuadPart /= Frequency.QuadPart;
 		deltaTime.QuadPart -= initTime + currentSong.offset * 1000;
-        delta = deltaTime.QuadPart;
-        int counter = counterStart;
-        while ( TRUE ) {
-            long noteTime = currentSong.start + currentSong.notes[counter].time;
-            long maxDelta = deltaTime.QuadPart + currentSong.speed * currentSong.usPerNote;
-            if( delta < noteTime && noteTime < maxDelta ) {
-                int starty = currentSong.ytop + currentSong.yint * ( 14 - currentSong.notes[counter].note );
-                int startx = currentSong.notes[counter].time * currentSong.xright / ( currentSong.speed * currentSong.usPerNote );
-                char args[8];
-                sprintf( args, "%d;%d", startx, starty );
-                pos( 1, args, currentSong.skins[1] );
-            }
-            if( noteTime > maxDelta ) {
+        delta = deltaTime.QuadPart + currentSong.xleft * 1000;
+        int startx, starty, counter = 0;
+        long maxDelta = deltaTime.QuadPart + currentSong.speed * currentSong.usPerNote;
+        if( lastDelta == 0 ) {
+            lastDelta = delta;
+        }
+        
+        pthread_mutex_lock(&screenLock);
+        {
+            int tmp = 0;
+            memcpy( &tmp, screen->sheet, INT_SIZE );
+            int size = ( tmp + 1 ) * sizeof( CHAR_BYTE ) + sizeof( int );
+            memcpy( display->sheet, screen->sheet, size );
+            while ( TRUE ) {
                 if( currentSong.notes[counter].note == EOS ) {
-                    songIsPlaying = FALSE;
+                    if( ( currentSong.start + currentSong.notes[counter - 1].time ) < delta ) {
+                        pthread_mutex_lock(&inputEventsLock);
+                        {
+                            int currentSize;
+                            memcpy( &currentSize, inputEvents, sizeof( int ) );
+                            ++currentSize;
+                            inputEvents[currentSize].time = delta;
+                            inputEvents[currentSize].event = KEY_ESC;
+                            memcpy( inputEvents, &currentSize, sizeof( int ) );
+                        }
+                        pthread_mutex_unlock(&inputEventsLock);
+                    }
                     break;
                 }
-                break;
+                noteTime = currentSong.start + currentSong.notes[counter].time;
+                starty = currentSong.ytop + currentSong.yint * ( 14 - currentSong.notes[counter].note );
+                if( delta < noteTime && noteTime < maxDelta ) {
+                    startx = ( noteTime - lastDelta ) * currentSong.xright / ( currentSong.speed * currentSong.usPerNote );
+                    sprintf( args, "%d;%d", startx, starty );
+                    if( currentSong.notes[counter].note % 2 == 1 && currentSong.notes[counter].note != 7 ) {
+                        pos( 1, args, currentSong.skins[1] );
+                    }
+                    else
+                    {
+                        pos( 1, args, currentSong.skins[0] );
+                    }
+                    startx = ( noteTime - delta ) * currentSong.xright / ( currentSong.speed * currentSong.usPerNote );
+                    sprintf( args, "%d;%d", startx, starty );
+                    pos( 1, args, currentSong.skins[2] );
+                }
+                if( maxDelta < noteTime ) {
+                    break;
+                }            
+                ++counter;
             }
-            ++counter;
         }
-        /*
-
-            12:00AM 1/20/2020
-            day of submission
-            imma head out for tonight
-            but good grind boys...
-
-        */
+        pthread_mutex_unlock(&screenLock);
+        lastDelta = delta;
+    }
+    else
+    {        
+        lastDelta = 0;
     }
 
+    //determines whether current game cycle is over yet
     return ACTIVE;
 }

@@ -19,7 +19,7 @@ void * inputCycles ( void* );
 void pushInputEvent ( long, int );
 
 int main() {
-	
+// Testing block
 #ifdef DEBUG
 NoteCollection * currentSongNotes;
 //currentSongNotes = calloc( 50, 1 * sizeof( NoteCollection ) );
@@ -32,6 +32,7 @@ for(int i = 0; i < 50; i++){
 return 0;
 #endif
 
+	//Game initialization 
 	int initZero = 0;
 	gamestate = INACTIVE;
 	memcpy( inputEvents, &initZero, sizeof( int ) );
@@ -42,6 +43,7 @@ return 0;
 	QueryPerformanceFrequency(&Frequency);
 	initGamevals();
 
+	//Load default.txt
 	strcpy(elements[BACKGROUND].name,"screen");
 	elements[BACKGROUND].elementId = BACKGROUND;
 	if( loadElement("../Resources/default.txt", &elements[BACKGROUND]) != 0 ) {
@@ -54,8 +56,14 @@ return 0;
 	updatePalette(0,LINEAR,0,TXT);
 	updateScreen();
 
+	//start game cycles
 	gamestate = ACTIVE;
 	screenCycles();
+
+	for( int i = 0; i < MAX_ELEMENTS; i++) {
+		unloadElement( &elements[i] ); 
+	}
+	puts("successfully exited program");
 
 	return 0;
 }
@@ -65,6 +73,7 @@ int screenCycles( void ) {
 	const long sleepTime = 1000000 / MAX_FRAMES;
 	static int prev_init = 0;
 	
+	//Spawn threads
 	if( pthread_create( &inputCycle, NULL, &inputCycles, NULL ) != 0 ) {
 		ERR("cannot create","thread");
 	}
@@ -74,10 +83,11 @@ int screenCycles( void ) {
 
 	initScrollList(0);
 
+	//constant loop
 	while ( gamestate == ACTIVE ) {
 		QueryPerformanceCounter(&StartingTime);
 		{
-			gamestate = updateDisplay();
+			gamestate = updateDisplay( &elements[BACKGROUND] );
 			pthread_mutex_lock(&screenLock);
 			updateScreen();
 			pthread_mutex_unlock(&screenLock);
@@ -93,6 +103,7 @@ int screenCycles( void ) {
 		usleep( sleepTime - ElapsedMicroseconds.QuadPart % sleepTime );
 	}
 
+	//Exit prompt
 	system("cls");
     puts("\x1b[1mPress any key to exit" CLEAR);
 	pthread_join( inputCycle, NULL );
@@ -106,12 +117,14 @@ void* loadElements( void* args ) {
 	ElementIds elementId;
 	int currentsize;
 
+	//process loading stack
 	while ( gamestate == ACTIVE ) {
 		memcpy( &currentsize, elementsToLoad, sizeof( int ) );
 		while ( currentsize > 0 ) {
 			pthread_mutex_lock(&elementLoaderLock);
 			{
 				if( currentSong.loadFrom[0] == '.' ) {
+					free( currentSong.notes );
 					if( ( currentSong.notes = loadSongNotes( currentSong.loadFrom ) ) == NULL ) {
 						ERR("couldn't load",currentSong.loadFrom);
 					}
@@ -123,6 +136,7 @@ void* loadElements( void* args ) {
 				--currentsize;
 				memcpy( elementsToLoad, &currentsize, sizeof( int ) );
 				if( elementId > MAX_ELEMENTS ) {
+					unloadElement( currentSong.skins[elementId - MAX_ELEMENTS - 1] );
 					if( ( currentSong.skins[elementId - MAX_ELEMENTS - 1] = malloc( sizeof( Element ) ) ) == NULL ) {
 						ERR(fileName,"could not be alloc'd");
 					}
@@ -157,6 +171,7 @@ void* inputCycles( void* args ) {
 		ERR("mutex","could not be initialized");
 	}
 
+	//get user input one character at a time
 	while ( gamestate == ACTIVE ) {
 		input = getch();
 		if( input == SPEC_KEY || input == 0 ) {
@@ -174,6 +189,7 @@ void* inputCycles( void* args ) {
 }
 
 void pushInputEvent ( long time, int event ) {
+	//push to input stack
 	pthread_mutex_lock(&inputEventsLock);
 	{
 		int currentSize;

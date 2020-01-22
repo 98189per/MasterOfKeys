@@ -62,9 +62,11 @@
 	"str": " 'F-777 : The Seven Seas'; 1; 1.00",
 	"esc": "../Resources/selectscreen.txt",
 	"note0": "../Resources/defaultnotes/clearnote.txt",
-	"note1": "../Resources/defaultnotes/note1.txt",
-	"staff": "11;2;180",
+	"note1": "../Resources/defaultnotes/clearnote1.txt",
+	"note2": "../Resources/defaultnotes/note1.txt",
+	"staff": "11;2;180;300",
 	"speed": "16",
-	"offset": "4000",
-	"notes": "../Songs/test-a/The_Seven_Seas_[Tutorial]_rev1.mid"
+	"offset": "6000",
+	"notes": "../Songs/test-a/The_Seven_Seas_[Tutorial]_rev1.mid",
+	"song": "../Songs/test-a/The-Seven-Seas-F-777.wav"
 }

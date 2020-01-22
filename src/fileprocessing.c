@@ -2,6 +2,7 @@
 
 #define READ_NEXT( ptr ) if( fread( &ptr, sizeof( CHAR_BYTE ), 1, inPtr ) != 1 ) { fclose( inPtr ); return NULL; }
 
+//read midi files into a note array
 NoteCollection * loadSongNotes ( const char * fileName ) {
     NoteCollection * songNotes;
     FILE *inPtr;
@@ -17,6 +18,7 @@ NoteCollection * loadSongNotes ( const char * fileName ) {
     long deltaTime = 0;
     BOOL minor = FALSE;
 
+    //open in binary mode and read byte by byte
     if( ( inPtr = fopen( fileName, "rb" ) ) == NULL ) {
         return NULL;
     }
@@ -36,6 +38,7 @@ NoteCollection * loadSongNotes ( const char * fileName ) {
             fclose( inPtr );
             return NULL;
         }
+        currentSong.ticksPerNote = 0;
         READ_NEXT(nextByte)
         currentSong.ticksPerNote += nextByte * 256;
         READ_NEXT(nextByte)
@@ -71,11 +74,12 @@ NoteCollection * loadSongNotes ( const char * fileName ) {
                 switch ( nextByte ) {
                 case 47:
                     songNotes[currentPos].note = EOS;
-                    songNotes[currentPos].time = deltaTime * currentSong.usPerNote / currentSong.ticksPerNote;
+                    songNotes[currentPos].time = deltaTime * ( currentSong.usPerNote / currentSong.ticksPerNote );
                     fclose( inPtr );
                     return songNotes;
                 case 81:
                     READ_NEXT(nextByte)
+                    currentSong.usPerNote = 0;
                     READ_NEXT(nextByte)
                     currentSong.usPerNote += nextByte * 65536;
                     READ_NEXT(nextByte)
@@ -131,7 +135,7 @@ NoteCollection * loadSongNotes ( const char * fileName ) {
                             tempNote += 2;
                         }
                         songNotes[currentPos].note = tempNote;
-                        songNotes[currentPos].time = deltaTime * currentSong.usPerNote / currentSong.ticksPerNote;
+                        songNotes[currentPos].time = deltaTime * ( currentSong.usPerNote / currentSong.ticksPerNote );
                         ++currentPos;
                     }
                     READ_NEXT(nextByte)
@@ -144,7 +148,7 @@ NoteCollection * loadSongNotes ( const char * fileName ) {
                             break;
                         }
                         READ_NEXT(nextByte)
-                    }
+                    }                                                       //parse MSB delta times (google "midi file format")
                     int factor = 1;
                     for( int i = n; i > -1; i--) {
                         deltaTime += ( tempChunk[i] % 128 ) * factor;
@@ -163,6 +167,7 @@ NoteCollection * loadSongNotes ( const char * fileName ) {
     return NULL;
 }
 
+//read element .txt files into property chains
 int loadElement ( const char * fileName, Element * element ) {
     FILE *inPtr;
     Property* propertyPtr;
@@ -247,10 +252,13 @@ int loadElement ( const char * fileName, Element * element ) {
     return 0;
 }
 
+//free up the memory from used property chains
 void unloadElement (Element * element) {
     Property* propertyPtr;
 
-    free(element->sheet);
+    if( element->sheet != NULL ) {
+        free(element->sheet);
+    }
     propertyPtr = element->properties;
     while( propertyPtr != NULL ) {
         free(propertyPtr->key);

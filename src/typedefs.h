@@ -58,7 +58,7 @@ enum GradStyles {
     RATIONAL
 };
 
-enum keyVals {
+enum keyVals {                                                          //numbers for all possible key values retured by getch() [i only use 4...]
     KEY_BS = 8, KEY_HT = 9, KEY_CR = 13, KEY_ESC = 27,
     KEY_SPC = 32, EXCLAMATION, DOUBLE_QUOTE, NUMBER_SIGN, DOLLAR_SIGN, 
     PERCENT, AMPERSAND, SINGLE_QUOTE, LEFT_PAR, RIGHT_PAR, ASTERISK,
@@ -86,42 +86,38 @@ typedef enum {
     INACTIVE
 } GameState;
 
-typedef enum {
-	BACKGROUND = 0,
-	/*...*/
-	BUTTON1 = 2, BUTTON2, BUTTON3, BUTTON4, BUTTON5,
-	NOTE1 = 7, NOTE2, NOTE3, NOTE4, NOTE5,
-	EGG
+typedef enum {              //constant element ids
+	BACKGROUND = 0
 } ElementIds;
 
-typedef enum {
+typedef enum {              //constant note ids
     C3, D3, E3, F3, G3, A3, B3, 
     C4, D4, E4, F4, G4, A4, B4, 
     EOS
 } Scale;
 
-typedef struct {
+typedef struct {            //groups notes and times
     long time;
     Scale note;
 } NoteCollection;
 
-typedef struct {
+typedef struct {            //groups keys and times
     long time;
     int event;
 } InputEvent;
 
-typedef struct {
+typedef struct {            //groups element id and file location
     char fileName[MAX_MOD * MAX_SIZE];
     ElementIds elementId;
 } ElementLoader;
 
-typedef struct property {
+typedef struct property {   //groups each property key with associated value
     char key[MAX_SIZE];
     char value[MAX_MOD * MAX_SIZE];
-    struct property* nextProperty;
+    struct property* nextProperty;  //links to next property in chain
 } Property;
 
-typedef struct {
+typedef struct {            //main element struct, various associated attributes
     char name[MAX_SIZE];
     int width, height;
     CHAR_BYTE* sheet;
@@ -133,14 +129,14 @@ typedef struct {
 
 typedef void (*FunctionPtr)(int, const char*, Element*);
 
-typedef struct {
+typedef struct {            //not implemented yet, but feel free to use it to keep track of repeated property functions!
     int mod;
     char val[MAX_MOD * MAX_SIZE];
     Element* element;
     FunctionPtr function;
 } PropertyUpdate;
 
-typedef struct {
+typedef struct {            //main display struct, groups relevant info
     int width, height;
     CHAR_BYTE* sheet;
     char* textVals;
@@ -150,22 +146,22 @@ typedef struct {
     CHAR_BYTE strcolors[8][3];
 } Screen;
 
-typedef struct {
+typedef struct {            //main song struct, groups relevant info
     long start;
     int usPerNote, ticksPerNote;
     char loadFrom[MAX_MOD * MAX_SIZE];
-    int offset, speed, ytop, yint, xright;
+    int offset, speed, ytop, yint, xright, xleft;
     Element * skins[14];
     NoteCollection * notes;
 } Song;
 
-long initTime;
+long initTime;              //time zero, all gametime is based off of this value
 
-Screen * display;
+Screen * display;           //global variables
 Song currentSong;
 
-InputEvent inputEvents[MAX_MOD * MAX_ELEMENTS];
+InputEvent inputEvents[MAX_MOD * MAX_ELEMENTS];                 //global stacks
 ElementLoader elementsToLoad[MAX_ELEMENTS];
-pthread_mutex_t inputEventsLock, elementLoaderLock, screenLock;
+pthread_mutex_t inputEventsLock, elementLoaderLock, screenLock; //global locks
 
-LARGE_INTEGER Frequency;
+LARGE_INTEGER Frequency;    //frequency of processor clock for getting us accurate time

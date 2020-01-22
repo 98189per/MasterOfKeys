@@ -60,8 +60,12 @@
 	"screen": "1",
 	"color1": "0;0;0",
 	"color2": "0;255;0",
+	"color3": "255;200;5",
+	"color4": "200;0;0",
 	"strcolor1": "0;255;0",
 	"strcolor2": "255;255;255",
+	"strcolor3": "255;0;0",
+	"strcolor4": "0;0;200",
 	"esc": "../Resources/default.txt",
 	"link": "../Resources/songlist.txt 12",
 	"startlist": "1"
