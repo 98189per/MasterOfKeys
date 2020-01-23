@@ -136,7 +136,9 @@ void* loadElements( void* args ) {
 				--currentsize;
 				memcpy( elementsToLoad, &currentsize, sizeof( int ) );
 				if( elementId > MAX_ELEMENTS ) {
-					unloadElement( currentSong.skins[elementId - MAX_ELEMENTS - 1] );
+					if( currentSong.skins[elementId - MAX_ELEMENTS - 1] != NULL ) {
+						unloadElement( currentSong.skins[elementId - MAX_ELEMENTS - 1] );
+					}
 					if( ( currentSong.skins[elementId - MAX_ELEMENTS - 1] = malloc( sizeof( Element ) ) ) == NULL ) {
 						ERR(fileName,"could not be alloc'd");
 					}
